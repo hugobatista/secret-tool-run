@@ -82,7 +82,12 @@ if ! command -v secret-tool >/dev/null 2>&1; then
 	echo "    ${BOLD}Arch Linux:${RESET}     sudo pacman -S libsecret"
 	echo "    ${BOLD}openSUSE:${RESET}       sudo zypper install libsecret-tools"
 	echo ""
-	read -p "Continue anyway? (y/N) " -n 1 -r
+	if [[ -e /dev/tty ]]; then
+		read -p "Continue anyway? (y/N) " -n 1 -r < /dev/tty
+	else
+		warning "Non-interactive mode, skipping secret-tool check"
+		REPLY="y"
+	fi
 	echo
 	if [[ ! $REPLY =~ ^[Yy]$ ]]; then
 		error "Installation cancelled"
@@ -100,7 +105,19 @@ echo "  2) ${BOLD}User-local${RESET}   → ~/.local/bin/vaultsh (no sudo needed)
 echo ""
 
 while true; do
-	read -p "Enter choice [1-2]: " choice
+	# Try to read from /dev/tty first (for piped installations), then stdin, then default to user-local
+	if [[ -t 0 ]]; then
+		# Interactive mode
+		read -p "Enter choice [1-2]: " choice
+	elif [[ -e /dev/tty ]]; then
+		# Piped but have /dev/tty available
+		read -p "Enter choice [1-2]: " choice < /dev/tty
+	else
+		# Non-interactive, default to user-local
+		info "Running in non-interactive mode, defaulting to user-local installation"
+		choice=2
+	fi
+
 	case $choice in
 		1)
 			INSTALL_DIR="/usr/local/bin"
@@ -123,7 +140,12 @@ TARGET_FILE="$INSTALL_DIR/vaultsh"
 # Check if target already exists
 if [[ -f "$TARGET_FILE" ]]; then
 	warning "vaultsh already exists at $TARGET_FILE"
-	read -p "Overwrite? (y/N) " -n 1 -r
+	if [[ -e /dev/tty ]]; then
+		read -p "Overwrite? (y/N) " -n 1 -r < /dev/tty
+	else
+		# Non-interactive mode, default to not overwriting
+		REPLY="n"
+	fi
 	echo
 	if [[ ! $REPLY =~ ^[Yy]$ ]]; then
 		error "Installation cancelled"

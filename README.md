@@ -34,7 +34,7 @@ vaultsh python app.py
 ### One-liner (Recommended)
 
 ```bash
-curl -fsSL https:/go.hugobatista.com/gh/vaultsh/blob/main/install.sh | sh
+curl -fsSL https://go.hugobatista.com/ghraw/vaultsh/main/install.sh | sh
 ```
 
 ### Or clone and install locally
