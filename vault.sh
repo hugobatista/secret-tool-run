@@ -7,7 +7,7 @@ set -euo pipefail
 # Default configuration
 secrets_file=".env"
 app_name=$(basename "$PWD")
-use_fd=false  # Use file descriptor instead of temp file
+use_fd=false  # Will be set to true if @SECRETS@ token is detected
 
 # Setup colored output for terminal
 color_on=""
@@ -24,8 +24,6 @@ while [[ $# -gt 0 ]]; do
       secrets_file="$2"; shift 2 ;;
     --app|-a)
       app_name="$2"; shift 2 ;;
-    --use-fd)
-      use_fd=true; shift ;;
     --help|-h)
       cat << 'EOF'
 Usage: vaultsh [OPTIONS] COMMAND [ARGS...]
@@ -36,14 +34,14 @@ avoiding the need to store .env files on disk.
 Options:
   --file FILE, -f FILE    Secrets file path (default: .env)
   --app APP, -a APP       Keyring app identifier (default: current folder name)
-  --use-fd                Use file descriptor instead of temp file (no disk I/O)
   --help, -h              Show this help message
 
 How it works:
   1. If secrets file exists locally → use it directly
-  2. Otherwise, load from keyring (app name) → create temporary file (or FD with --use-fd)
-  3. Execute your command with SECRETS_FILE environment variable set
-  4. Automatically delete temporary file after execution (not needed with --use-fd)
+  2. Otherwise, load from keyring (app name) → create temporary file
+  3. If command contains @SECRETS@ token → use file descriptor mode (no disk I/O)
+  4. Execute your command with SECRETS_FILE environment variable set
+  5. Automatically delete temporary file after execution (not needed with @SECRETS@)
 
 Examples:
   vaultsh uv run pywrangler dev
@@ -58,18 +56,20 @@ Examples:
   vaultsh --app myproject-prod npm start
     Uses specific keyring entry for production secrets
 
-  vaultsh --use-fd act --secret-file "$SECRETS_FILE"
-    No disk I/O - secrets passed via file descriptor (/dev/fd/N)
+  vaultsh act --secret-file @SECRETS@
+    ✅ Use @SECRETS@ token for file descriptor mode (zero disk I/O)
+    Token auto-enables FD mode, replaced with /dev/fd/9
 
-  vaultsh --use-fd docker run --env-file "$SECRETS_FILE" myimage
-    Load env vars from FD without creating temporary file
+  vaultsh docker run --env-file @SECRETS@ myimage
+    ✅ Works with any command, no shell wrapper needed
 
 Advanced:
+  - @SECRETS@ token: Use this in any argument to enable file descriptor mode
+    Command: vaultsh act --secret-file @SECRETS@
+    Token is replaced with /dev/fd/9, secrets passed via file descriptor (no disk)
   - Create <secrets-file>.keep (e.g., .env.keep) to prevent auto-deletion
-  - SECRETS_FILE env var is set to the file path (or /dev/fd/N with --use-fd)
+  - SECRETS_FILE env var is set to the file path (or /dev/fd/9 with @SECRETS@)
   - First run prompts for secrets and stores them in keyring automatically
-  - --use-fd mode: No disk writes, but requires command support for file descriptors
-    (won't work with shell sourcing or tools requiring regular files)
 
 EOF
       exit 0 ;;
@@ -98,6 +98,14 @@ if [[ $# -eq 0 ]]; then
   exit 1
 fi
 
+# Auto-detect @SECRETS@ token in arguments to enable FD mode
+for arg in "$@"; do
+  if [[ "$arg" == *"@SECRETS@"* ]]; then
+    use_fd=true
+    break
+  fi
+done
+
 # Setup cleanup trap to remove temporary secrets file on exit
 trap cleanup EXIT INT TERM
 
@@ -111,7 +119,7 @@ fi
 
 # Load secrets from keyring
 if [[ "$use_fd" == "true" ]]; then
-  info "Loading secrets for app='$app_name' (FD mode - no disk I/O)..."
+  info "Loading secrets for app='$app_name' (FD mode via @SECRETS@ - no disk I/O)..."
 else
   info "Loading secrets for app='$app_name' → $secrets_file..."
 fi
@@ -177,18 +185,22 @@ else
 fi
 
 # Execute the command with SECRETS_FILE environment variable
-info "→ Running: $*"
-
 if [[ "$use_fd" == "true" ]]; then
-  # Use file descriptor mode - no disk I/O
+  # Replace @SECRETS@ tokens with /dev/fd/9 and execute with FD mode
+  declare -a modified_args=()
+  for arg in "$@"; do
+    modified_args+=("${arg//@SECRETS@//dev/fd/9}")
+  done
+  info "→ Running: ${modified_args[*]}"
   # Open FD 9 for reading from secrets content (using heredoc to avoid ps exposure)
   exec 9< <(cat <<< "$secrets_content")
-  SECRETS_FILE="/dev/fd/9" "$@"
+  SECRETS_FILE="/dev/fd/9" "${modified_args[@]}"
   exec_status=$?
   # Close the file descriptor
   exec 9<&-
   exit $exec_status
 else
   # Use file mode - traditional temp file approach
+  info "→ Running: $*"
   SECRETS_FILE="$secrets_file" "$@"
 fi
