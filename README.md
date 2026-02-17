@@ -1,3 +1,5 @@
+[![GitHub Tag](https://img.shields.io/github/v/tag/hugobatista/vaultsh?logo=github&label=latest)](https://go.hugobatista.com/gh/vaultsh/releases)
+
 # vaultsh 🔐
 
 **Execute commands with secrets from keyring, not from disk.**
