@@ -104,36 +104,33 @@ echo "  1) ${BOLD}System-wide${RESET}  → /usr/local/bin/vaultsh (requires sudo
 echo "  2) ${BOLD}User-local${RESET}   → ~/.local/bin/vaultsh (no sudo needed)"
 echo ""
 
-while true; do
-	# Try to read from /dev/tty first (for piped installations), then stdin, then default to user-local
-	if [[ -t 0 ]]; then
-		# Interactive mode
+# Check if we're in interactive mode
+if [[ -t 0 ]]; then
+	# Fully interactive: stdin is a terminal
+	while true; do
 		read -p "Enter choice [1-2]: " choice
-	elif [[ -e /dev/tty ]]; then
-		# Piped but have /dev/tty available
-		read -p "Enter choice [1-2]: " choice < /dev/tty
-	else
-		# Non-interactive, default to user-local
-		info "Running in non-interactive mode, defaulting to user-local installation"
-		choice=2
-	fi
-
-	case $choice in
-		1)
-			INSTALL_DIR="/usr/local/bin"
-			NEEDS_SUDO=true
-			break
-			;;
-		2)
-			INSTALL_DIR="$HOME/.local/bin"
-			NEEDS_SUDO=false
-			break
-			;;
-		*)
-			warning "Invalid choice. Please enter 1 or 2."
-			;;
-	esac
-done
+		case $choice in
+			1)
+				INSTALL_DIR="/usr/local/bin"
+				NEEDS_SUDO=true
+				break 2
+				;;
+			2)
+				INSTALL_DIR="$HOME/.local/bin"
+				NEEDS_SUDO=false
+				break 2
+				;;
+			*)
+				warning "Invalid choice. Please enter 1 or 2."
+				;;
+		esac
+	done
+else
+	# Non-interactive mode (piped via curl)
+	info "Running in non-interactive mode, defaulting to user-local installation"
+	INSTALL_DIR="$HOME/.local/bin"
+	NEEDS_SUDO=false
+fi
 
 TARGET_FILE="$INSTALL_DIR/vaultsh"
 
