@@ -1,10 +1,11 @@
-[![GitHub Tag](https://img.shields.io/github/v/tag/hugobatista/vaultsh?logo=github&label=latest)](https://go.hugobatista.com/gh/vaultsh/releases)
+[![GitHub Tag](https://img.shields.io/github/v/tag/hugobatista/secret-tool-run?logo=github&label=latest)](https://go.hugobatista.com/gh/secret-tool-run/releases)
 
-# vaultsh 🔐
+# secret-tool-run 🔐
 
 **Execute commands with secrets from keyring, not from disk.**
 
-vaultsh is a bash utility that runs commands with environment secrets loaded from your system's secure keyring, eliminating the need to store `.env` files on disk. Perfect for developers who want to keep credentials off the filesystem while maintaining a smooth development workflow.
+secret-tool-run is a bash utility that runs commands with environment secrets loaded from your system's secure keyring (through secret-tool), eliminating the need to store `.env` files on disk. Perfect for developers who want to keep credentials off the filesystem while maintaining a smooth development workflow.
+
 
 ## Quick Example
 
@@ -18,10 +19,10 @@ python app.py
 Do this (secrets from keyring):
 ```bash
 # ✅ Secure: secrets loaded from keyring, never persisted to disk
-vaultsh python app.py
+secret-tool-run python app.py
 ```
 
-**Under the hood:** vaultsh retrieves your secrets from the system keyring (encrypted and managed by the OS) through secret-tool, creates a temporary file with secure permissions only your process can read, passes it to your command, and deletes it immediately after—leaving no trace on disk.
+**Under the hood:** secret-tool-run retrieves your secrets from the system keyring (encrypted and managed by the OS) through secret-tool, creates a temporary file with secure permissions only your process can read, passes it to your command, and deletes it immediately after—leaving no trace on disk.
 
 
 ## Prerequisites
@@ -35,9 +36,9 @@ vaultsh python app.py
 
 ### One-liner (Recommended)
 
-Installs vaultsh user locally to `~/.local/bin`:
+Installs secret-tool-run user locally to `~/.local/bin`:
 ```bash
-curl -fsSL https://go.hugobatista.com/ghraw/vaultsh/main/install.sh | sh
+curl -fsSL https://go.hugobatista.com/ghraw/secret-tool-run/main/install.sh | sh
 ```
 
 ### Or clone and install locally
@@ -45,21 +46,21 @@ curl -fsSL https://go.hugobatista.com/ghraw/vaultsh/main/install.sh | sh
 Download the repository and run the installer:
 
 ```bash
-git clone https:/go.hugobatista.com/gh/vaultsh.git
-cd vaultsh
+git clone https:/go.hugobatista.com/gh/secret-tool-run.git
+cd secret-tool-run
 ./install.sh
 ```
 
 The installer will:
 1. Check for dependencies
 2. Let you choose between system-wide (`/usr/local/bin`) or user-local (`~/.local/bin`) installation
-3. Set up the `vaultsh` command
+3. Set up the `secret-tool-run` command
 4. Verify the installation
 
 ## Usage
 
 ```bash
-vaultsh [OPTIONS] COMMAND [ARGS...]
+secret-tool-run [OPTIONS] COMMAND [ARGS...]
 ```
 
 ### Options
@@ -76,7 +77,7 @@ vaultsh [OPTIONS] COMMAND [ARGS...]
 ### Example 1: Python development with uv
 
 ```bash
-vaultsh uv run pywrangler dev
+secret-tool-run uv run pywrangler dev
 ```
 
 **What happens:**
@@ -88,7 +89,7 @@ vaultsh uv run pywrangler dev
 ### Example 2: Python project with hatch
 
 ```bash
-vaultsh hatch run dev
+secret-tool-run hatch run dev
 ```
 
 Perfect for running development servers where you need environment variables but don't want them persisted on disk.
@@ -96,7 +97,7 @@ Perfect for running development servers where you need environment variables but
 ### Example 3: GitHub Actions local testing with act
 
 ```bash
-vaultsh --file .secrets act --secret-file .secrets
+secret-tool-run --file .secrets act --secret-file .secrets
 ```
 
 **What happens:**
@@ -111,10 +112,10 @@ This is especially useful for testing GitHub Actions workflows locally while kee
 
 ```bash
 # Development environment
-vaultsh --app myproject-dev npm start
+secret-tool-run --app myproject-dev npm start
 
 # Production environment
-vaultsh --app myproject-prod npm start
+secret-tool-run --app myproject-prod npm start
 ```
 
 Each `--app` name is a separate keyring entry, allowing you to manage different secret sets (dev, staging, prod) for the same project.
@@ -122,7 +123,7 @@ Each `--app` name is a separate keyring entry, allowing you to manage different 
 ### Example 5: Docker commands
 
 ```bash
-vaultsh docker-compose up
+secret-tool-run docker-compose up
 ```
 
 Great for docker-compose files that source `.env` for configuration.
@@ -130,15 +131,15 @@ Great for docker-compose files that source `.env` for configuration.
 ### Example 6: Just viewing the secrets file path
 
 ```bash
-vaultsh env | grep SECRETS_FILE
+secret-tool-run env | grep SECRETS_FILE
 ```
 
-The `SECRETS_FILE` environment variable contains the absolute path to the secrets file created by vaultsh.
+The `SECRETS_FILE` environment variable contains the absolute path to the secrets file created by secret-tool-run.
 
 ### Example 7: File descriptor mode (no disk I/O)
 
 ```bash
-vaultsh act --secret-file @SECRETS@
+secret-tool-run act --secret-file @SECRETS@
 ```
 
 **What happens:**
@@ -162,7 +163,7 @@ vaultsh act --secret-file @SECRETS@
 ### Example 8: Docker with file descriptor mode
 
 ```bash
-vaultsh docker run --env-file @SECRETS@ myimage
+secret-tool-run docker run --env-file @SECRETS@ myimage
 ```
 
 Secrets are loaded from keyring and passed to Docker without ever touching the disk. The `@SECRETS@` token automatically enables zero-disk-I/O mode.
@@ -175,7 +176,7 @@ Create a `.keep` file to prevent automatic deletion of the secrets file:
 
 ```bash
 touch .env.keep
-vaultsh your-command
+secret-tool-run your-command
 # .env will remain after execution
 ```
 
@@ -188,10 +189,10 @@ This is useful for:
 
 ```bash
 # Use a different file name
-vaultsh --file .env.production npm run build
+secret-tool-run --file .env.production npm run build
 
 # Use a path in a different directory
-vaultsh --file /tmp/my-secrets ./deploy.sh
+secret-tool-run --file /tmp/my-secrets ./deploy.sh
 ```
 
 ### SECRETS_FILE Environment Variable
@@ -199,7 +200,7 @@ vaultsh --file /tmp/my-secrets ./deploy.sh
 Your command receives the `SECRETS_FILE` environment variable pointing to the secrets file:
 
 ```bash
-vaultsh bash -c 'echo "Secrets are at: $SECRETS_FILE"'
+secret-tool-run bash -c 'echo "Secrets are at: $SECRETS_FILE"'
 ```
 
 You can use this in scripts that need to know the file location explicitly.
@@ -209,11 +210,11 @@ You can use this in scripts that need to know the file location explicitly.
 For maximum security, use the `@SECRETS@` token in your command to pass secrets via file descriptor without writing to disk:
 
 ```bash
-vaultsh act --secret-file @SECRETS@
+secret-tool-run act --secret-file @SECRETS@
 ```
 
 **How it works:**
-- vaultsh detects the `@SECRETS@` token in your command arguments
+- secret-tool-run detects the `@SECRETS@` token in your command arguments
 - Loads secrets from keyring into memory only
 - Creates file descriptor at `/dev/fd/9` (no disk write)
 - Replaces `@SECRETS@` token with `/dev/fd/9` in all arguments
@@ -233,13 +234,13 @@ vaultsh act --secret-file @SECRETS@
 
 ✅ **Works with these tools:**
 ```bash
-vaultsh act --secret-file @SECRETS@
-vaultsh docker run --env-file @SECRETS@ image
+secret-tool-run act --secret-file @SECRETS@
+secret-tool-run docker run --env-file @SECRETS@ image
 ```
 
 Replaced tokens work just like file paths:
 ```bash
-vaultsh mycommand --config @SECRETS@ --output results.txt
+secret-tool-run mycommand --config @SECRETS@ --output results.txt
 # All @SECRETS@ tokens are replaced with /dev/fd/9
 ```
 
@@ -247,7 +248,7 @@ vaultsh mycommand --config @SECRETS@ --output results.txt
 
 On first use (when secrets aren't in keyring):
 
-1. vaultsh prompts: "Paste your secrets content..."
+1. secret-tool-run prompts: "Paste your secrets content..."
 2. Paste your `.env` content (KEY=VALUE format)
 3. Press `Ctrl-D` to finish (or `Ctrl-C` to cancel)
 4. Secrets are encrypted and stored in system keyring
@@ -262,11 +263,11 @@ On first use (when secrets aren't in keyring):
 - **No git commits**: Temporary files are created/deleted, reducing risk of accidental commits
 - **Session isolation**: Each terminal session can use different secrets with `--app` flag
 
-**⚠️ Important**: While vaultsh improves security, temporary files are still written to disk briefly (in default mode). For maximum security:
+**⚠️ Important**: While secret-tool-run improves security, temporary files are still written to disk briefly (in default mode). For maximum security:
 - **Use `@SECRETS@` token** in your command for zero disk writes (when your tool supports it)
 - Use encrypted home directories
 - Ensure your keyring is properly locked when not in use
-- Be cautious running vaultsh on shared systems
+- Be cautious running secret-tool-run on shared systems
 
 ## Troubleshooting
 
@@ -276,10 +277,10 @@ The command may require a regular file instead of a file descriptor. Try without
 
 ```bash
 # If this fails:
-vaultsh mycommand --file @SECRETS@
+secret-tool-run mycommand --file @SECRETS@
 
 # Try this instead:
-vaultsh mycommand
+secret-tool-run mycommand
 ```
 
 ### "No secrets found" on every run
@@ -327,7 +328,7 @@ secret-tool clear app "myproject-prod"
 
 ### Command fails but secrets file remains
 
-If your command crashes before vaultsh's cleanup trap runs, manually remove:
+If your command crashes before secret-tool-run's cleanup trap runs, manually remove:
 
 ```bash
 rm .env  # or your custom secrets file name
@@ -342,10 +343,10 @@ Run the uninstall script:
 ```
 
 This will:
-1. Remove the `vaultsh` binary
+1. Remove the `secret-tool-run` binary
 2. Optionally help you clear keyring entries
 
-To manually clear all vaultsh secrets from keyring:
+To manually clear all secret-tool-run secrets from keyring:
 
 ```bash
 # List all entries

@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-# vaultsh installer
-# Installs vaultsh to system-wide or user-local bin directory
+# secret-tool-run installer
+# Installs secret-tool-run to system-wide or user-local bin directory
 
 # Colors for output
 if [[ -t 1 ]] && command -v tput >/dev/null 2>&1; then
@@ -43,15 +43,15 @@ header() {
 	echo ""
 }
 
-header "vaultsh Installer"
+header "secret-tool-run Installer"
 
-REPO_URL="https://go.hugobatista.com/gh/vaultsh"
-REPO_DIR="vaultsh-repo-$$"
+REPO_URL="https://go.hugobatista.com/gh/secret-tool-run"
+REPO_DIR="secret-tool-run-repo-$$"
 CLEANUP_REPO=false
 
 # Check if we're in the right directory or need to clone the repo
 if [[ ! -f "vault.sh" ]]; then
-	info "Cloning vaultsh repository..."
+	info "Cloning secret-tool-run repository..."
 	if ! git clone --depth 1 "$REPO_URL" "$REPO_DIR" 2>/dev/null; then
 		error "Failed to clone repository. Make sure git is installed."
 		exit 1
@@ -74,7 +74,7 @@ info "Checking for secret-tool..."
 if ! command -v secret-tool >/dev/null 2>&1; then
 	warning "secret-tool not found"
 	echo ""
-	echo "  vaultsh requires secret-tool from the libsecret-tools package."
+	echo "  secret-tool-run requires secret-tool from the libsecret-tools package."
 	echo "  Please install it using your package manager:"
 	echo ""
 	echo "    ${BOLD}Fedora/RHEL:${RESET}    sudo dnf install libsecret-tools"
@@ -100,8 +100,8 @@ fi
 # Determine installation location
 header "Choose Installation Location"
 
-echo "  1) ${BOLD}System-wide${RESET}  → /usr/local/bin/vaultsh (requires sudo)"
-echo "  2) ${BOLD}User-local${RESET}   → ~/.local/bin/vaultsh (no sudo needed)"
+echo "  1) ${BOLD}System-wide${RESET}  → /usr/local/bin/secret-tool-run (requires sudo)"
+echo "  2) ${BOLD}User-local${RESET}   → ~/.local/bin/secret-tool-run (no sudo needed)"
 echo ""
 
 INSTALL_DIR=""
@@ -133,11 +133,11 @@ else
 	NEEDS_SUDO=false
 fi
 
-TARGET_FILE="$INSTALL_DIR/vaultsh"
+TARGET_FILE="$INSTALL_DIR/secret-tool-run"
 
 # Check if target already exists
 if [[ -f "$TARGET_FILE" ]]; then
-	warning "vaultsh already exists at $TARGET_FILE"
+	warning "secret-tool-run already exists at $TARGET_FILE"
 	if [[ -e /dev/tty ]]; then
 		read -p "Overwrite? (y/N) " -n 1 -r < /dev/tty
 	else
@@ -162,7 +162,7 @@ if [[ ! -d "$INSTALL_DIR" ]]; then
 fi
 
 # Install the script
-info "Installing vaultsh to $TARGET_FILE..."
+info "Installing secret-tool-run to $TARGET_FILE..."
 if [[ "$NEEDS_SUDO" == true ]]; then
 	sudo cp vault.sh "$TARGET_FILE"
 	sudo chmod +x "$TARGET_FILE"
@@ -171,15 +171,15 @@ else
 	chmod +x "$TARGET_FILE"
 fi
 
-success "Installed vaultsh to $TARGET_FILE"
+success "Installed secret-tool-run to $TARGET_FILE"
 
 # Verify installation
 info "Verifying installation..."
 if [[ "$NEEDS_SUDO" == true ]] || [[ ":$PATH:" == *":$INSTALL_DIR:"* ]]; then
-	if command -v vaultsh >/dev/null 2>&1; then
-		success "Installation verified - vaultsh is in PATH"
+	if command -v secret-tool-run >/dev/null 2>&1; then
+		success "Installation verified - secret-tool-run is in PATH"
 	else
-		warning "vaultsh installed but not found in PATH"
+		warning "secret-tool-run installed but not found in PATH"
 		warning "You may need to open a new terminal or run: hash -r"
 	fi
 else
@@ -200,18 +200,18 @@ fi
 echo ""
 header "Installation Complete!"
 echo ""
-echo "Try running: ${BOLD}vaultsh --help${RESET}"
+echo "Try running: ${BOLD}secret-tool-run --help${RESET}"
 echo ""
 echo "Quick start:"
 echo "  1. Navigate to a project directory"
-echo "  2. Run: ${BOLD}vaultsh your-command${RESET}"
+echo "  2. Run: ${BOLD}secret-tool-run your-command${RESET}"
 echo "  3. On first run, paste your .env content (Ctrl-D to finish)"
 echo "  4. Secrets stored in keyring - future runs load automatically!"
 echo ""
 echo "Examples:"
-echo "  ${BOLD}vaultsh uv run pywrangler dev${RESET}"
-echo "  ${BOLD}vaultsh hatch run dev${RESET}"
-echo "  ${BOLD}vaultsh --file .secrets act --secret-file .secrets${RESET}"
+echo "  ${BOLD}secret-tool-run uv run pywrangler dev${RESET}"
+echo "  ${BOLD}secret-tool-run hatch run dev${RESET}"
+echo "  ${BOLD}secret-tool-run --file .secrets act --secret-file .secrets${RESET}"
 echo ""
 echo "For more information, see: ${CYAN}README.md${RESET}"
 echo ""

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# vaultsh - Execute commands with secrets from keyring, avoiding .env files on disk
+# secret-tool-run - Execute commands with secrets from keyring, avoiding .env files on disk
 # Automatically loads secrets from keyring, creates temporary .env, and cleans up
 
 version="0.1.0"
@@ -28,9 +28,9 @@ while [[ $# -gt 0 ]]; do
       app_name="$2"; shift 2 ;;
     --help|-h)
       cat << EOF
-Usage: vaultsh [OPTIONS] COMMAND [ARGS...]
+Usage: secret-tool-run [OPTIONS] COMMAND [ARGS...]
 
-vaultsh $version - Execute commands with secrets loaded from your system keyring,
+secret-tool-run $version - Execute commands with secrets loaded from your system keyring,
 avoiding the need to store .env files on disk.
 
 Options:
@@ -46,28 +46,28 @@ How it works:
   5. Automatically delete temporary file after execution (not needed with @SECRETS@)
 
 Examples:
-  vaultsh uv run pywrangler dev
+  secret-tool-run uv run pywrangler dev
     Creates .env from keyring, runs command, removes .env
 
-  vaultsh hatch run dev
+  secret-tool-run hatch run dev
     Loads secrets and runs hatch development server
 
-  vaultsh --file .secrets act --secret-file .secrets
+  secret-tool-run --file .secrets act --secret-file .secrets
     Uses custom secrets file for GitHub Actions local testing
 
-  vaultsh --app myproject-prod npm start
+  secret-tool-run --app myproject-prod npm start
     Uses specific keyring entry for production secrets
 
-  vaultsh act --secret-file @SECRETS@
+  secret-tool-run act --secret-file @SECRETS@
     ✅ Use @SECRETS@ token for file descriptor mode (zero disk I/O)
     Token auto-enables FD mode, replaced with /dev/fd/9
 
-  vaultsh docker run --env-file @SECRETS@ myimage
+  secret-tool-run docker run --env-file @SECRETS@ myimage
     ✅ Works with any command, no shell wrapper needed
 
 Advanced:
   - @SECRETS@ token: Use this in any argument to enable file descriptor mode
-    Command: vaultsh act --secret-file @SECRETS@
+    Command: secret-tool-run act --secret-file @SECRETS@
     Token is replaced with /dev/fd/9, secrets passed via file descriptor (no disk)
   - Create <secrets-file>.keep (e.g., .env.keep) to prevent auto-deletion
   - SECRETS_FILE env var is set to the file path (or /dev/fd/9 with @SECRETS@)
