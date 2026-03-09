@@ -10,6 +10,7 @@ version="0.1.0"
 secrets_file=".env"
 app_name=$(basename "$PWD")
 use_fd=false  # Will be set to true if @SECRETS@ token is detected
+delete_local_file_after=false  # Will be set to true if user opts to store local file in keyring
 
 # Setup colored output for terminal
 color_on=""
@@ -88,9 +89,12 @@ info() {
 # Cleanup function: removes secrets file unless .keep file exists
 # No cleanup needed in FD mode (file descriptor auto-closes)
 cleanup() {
-  if [[ "$use_fd" == "false" ]] && [[ -f "$secrets_file" && ! -e "${secrets_file}.keep" ]]; then
-    rm -f "$secrets_file"
-    info "✓ $secrets_file deleted after run"
+  if [[ "$use_fd" == "false" ]]; then
+    # Delete if user opted to store in keyring, or if it's a temporary file without .keep
+    if [[ "$delete_local_file_after" == "true" ]] || [[ -f "$secrets_file" && ! -e "${secrets_file}.keep" ]]; then
+      rm -f "$secrets_file"
+      info "✓ $secrets_file deleted after run"
+    fi
   fi
 }
 
@@ -111,13 +115,32 @@ done
 # Setup cleanup trap to remove temporary secrets file on exit
 trap cleanup EXIT INT TERM
 
-# If secrets file already exists locally, use it directly (no keyring needed)
+# If secrets file already exists locally, ask user if they want to store it in keyring
 # Skip this check when using file descriptors, as we'll provide via /dev/fd/9
 if [[ "$use_fd" == "false" ]] && [[ -f "$secrets_file" ]]; then
-  info "ℹ Using existing local file: $secrets_file"
-  info "→ Running: $*"
-  SECRETS_FILE="$secrets_file" "$@"
-  exit $?
+  info "ℹ Found existing local file: $secrets_file"
+  read -p "Store this file in the keyring for app='$app_name'? (y/n) " -n 1 -r
+  echo  # New line after response
+  
+  if [[ $REPLY =~ ^[Yy]$ ]]; then
+    # Read the file content and store in keyring
+    secrets_content="$(cat "$secrets_file")"
+    label="Secrets for $app_name"
+    
+    if echo "$secrets_content" | secret-tool store --label "$label" app "$app_name"; then
+      info "✓ Stored in keyring as '$label'"
+      delete_local_file_after=true
+    else
+      echo "Error: Failed to store secrets in keyring. Using local file instead." >&2
+    fi
+  fi
+  
+  # If we didn't store in keyring, just use the file directly
+  if [[ "$delete_local_file_after" == "false" ]]; then
+    info "→ Running: $*"
+    SECRETS_FILE="$secrets_file" "$@"
+    exit $?
+  fi
 fi
 
 # Load secrets from keyring
