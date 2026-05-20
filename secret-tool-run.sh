@@ -4,13 +4,14 @@ set -euo pipefail
 # secret-tool-run - Execute commands with secrets from keyring, avoiding .env files on disk
 # Automatically loads secrets from keyring, creates temporary .env, and cleans up
 
-version="0.2.0"
+version="0.3.0"
 
 # Default configuration
 secrets_file=".env"
 app_name=$(basename "$PWD")
 use_fd=false  # Will be set to true if @SECRETS@ token is detected
 delete_local_file_after=false  # Will be set to true if user opts to store local file in keyring
+source_mode=false              # When true, source and export .env vars before running command
 
 # Setup colored output for terminal
 color_on=""
@@ -27,6 +28,8 @@ while [[ $# -gt 0 ]]; do
       secrets_file="$2"; shift 2 ;;
     --app|-a)
       app_name="$2"; shift 2 ;;
+    --source|-s)
+      source_mode=true; shift ;;
     --help|-h)
       cat << EOF
 Usage: secret-tool-run [OPTIONS] COMMAND [ARGS...]
@@ -37,6 +40,7 @@ avoiding the need to store .env files on disk.
 Options:
   --file FILE, -f FILE    Secrets file path (default: .env)
   --app APP, -a APP       Keyring app identifier (default: current folder name)
+  --source, -s            Source and export .env vars into the environment
   --help, -h              Show this help message
 
 How it works:
@@ -44,7 +48,9 @@ How it works:
   2. Otherwise, load from keyring (app name) → create temporary file
   3. If command contains @SECRETS@ token → use file descriptor mode (no disk I/O)
   4. Execute your command with SECRETS_FILE environment variable set
-  5. Automatically delete temporary file after execution (not needed with @SECRETS@)
+  5. With --source: source and export .env KEY=VALUE pairs before running (default: off)
+     In source mode, no temp file is written — secrets are loaded directly into memory
+  6. Automatically delete temporary file after execution (not needed with @SECRETS@ or --source)
 
 Examples:
   secret-tool-run uv run pywrangler dev
@@ -52,6 +58,9 @@ Examples:
 
   secret-tool-run hatch run dev
     Loads secrets and runs hatch development server
+
+  secret-tool-run --source ansible-playbook site.yml
+    Sources .env into environment so ansible-playbook sees the vars (no manual source needed)
 
   secret-tool-run --file .secrets act --secret-file .secrets
     Uses custom secrets file for GitHub Actions local testing
@@ -67,12 +76,16 @@ Examples:
     ✅ Works with any command, no shell wrapper needed
 
 Advanced:
+  - --source, -s: Source and export all variables into the environment before running
+    your command. No temp file is written — secrets stay in memory.
+    Useful for tools like ansible-playbook that expect env vars.
   - @SECRETS@ token: Use this in any argument to enable file descriptor mode
     Command: secret-tool-run act --secret-file @SECRETS@
     Token is replaced with /dev/fd/9, secrets passed via file descriptor (no disk)
   - Create <secrets-file>.keep (e.g., .env.keep) to prevent auto-deletion
   - SECRETS_FILE env var is set to the file path (or /dev/fd/9 with @SECRETS@)
   - First run prompts for secrets and stores them in keyring automatically
+  - Combine --source with @SECRETS@: sources vars into env AND passes FD to command
 
 EOF
       exit 0 ;;
@@ -86,8 +99,20 @@ info() {
 	printf '%s%s%s\n' "$color_on" "$*" "$color_off"
 }
 
+# Source .env file and export all KEY=VALUE pairs into the environment
+# Uses set -a (allexport) to auto-export every sourced variable
+source_and_export() {
+  local file="$1"
+  if [[ -f "$file" ]]; then
+    set -a
+    source "$file"
+    set +a
+  fi
+}
+
 # Cleanup function: removes secrets file unless .keep file exists
 # No cleanup needed in FD mode (file descriptor auto-closes)
+# No cleanup needed in source mode (no file written when loading from keyring)
 cleanup() {
   if [[ "$use_fd" == "false" ]]; then
     # Delete if user opted to store in keyring, or if it's a temporary file without .keep
@@ -137,7 +162,12 @@ if [[ "$use_fd" == "false" ]] && [[ -f "$secrets_file" ]]; then
   
   # If we didn't store in keyring, just use the file directly
   if [[ "$delete_local_file_after" == "false" ]]; then
-    info "→ Running: $*"
+    if [[ "$source_mode" == "true" ]]; then
+      source_and_export "$secrets_file"
+      info "→ Sourced into environment + Running: $*"
+    else
+      info "→ Running: $*"
+    fi
     SECRETS_FILE="$secrets_file" "$@"
     exit $?
   fi
@@ -146,6 +176,8 @@ fi
 # Load secrets from keyring
 if [[ "$use_fd" == "true" ]]; then
   info "Loading secrets for app='$app_name' (FD mode via @SECRETS@ - no disk I/O)..."
+elif [[ "$source_mode" == "true" ]]; then
+  info "Loading secrets for app='$app_name' (source mode - no file written)..."
 else
   info "Loading secrets for app='$app_name' → $secrets_file..."
 fi
@@ -166,6 +198,8 @@ if secrets_content=$(secret-tool lookup app "$app_name" 2>/dev/null) && [[ -n "$
   
   if [[ "$use_fd" == "true" ]]; then
     info "✓ Loaded from keyring ($line_count lines)"
+  elif [[ "$source_mode" == "true" ]]; then
+    info "✓ Loaded from keyring ($line_count lines, source mode — no file written)"
   else
     # Write to file with secure permissions
     echo "$secrets_content" > "$secrets_file"
@@ -194,6 +228,8 @@ else
 			
 			if [[ "$use_fd" == "true" ]]; then
 				info "✓ Stored in keyring as '$label' ($line_count lines)"
+			elif [[ "$source_mode" == "true" ]]; then
+				info "✓ Stored in keyring as '$label' ($line_count lines, source mode — no file written)"
 			else
 				# Write to file with secure permissions
 				echo "$secrets_content" > "$secrets_file"
@@ -217,6 +253,15 @@ if [[ "$use_fd" == "true" ]]; then
   for arg in "$@"; do
     modified_args+=("${arg//@SECRETS@//dev/fd/9}")
   done
+
+  # Source into environment when --source is used (via process substitution, no disk I/O)
+  if [[ "$source_mode" == "true" ]]; then
+    set -a
+    source <(echo "$secrets_content")
+    set +a
+    info "→ Sourced into environment (from keyring, no disk I/O)"
+  fi
+
   info "→ Running: ${modified_args[*]}"
   # Open FD 9 for reading from secrets content (using heredoc to avoid ps exposure)
   exec 9< <(cat <<< "$secrets_content")
@@ -226,7 +271,16 @@ if [[ "$use_fd" == "true" ]]; then
   exec 9<&-
   exit $exec_status
 else
-  # Use file mode - traditional temp file approach
-  info "→ Running: $*"
-  SECRETS_FILE="$secrets_file" "$@"
+  if [[ "$source_mode" == "true" ]]; then
+    # Source directly from keyring content in memory — no temp file written
+    set -a
+    source <(echo "$secrets_content")
+    set +a
+    info "→ Sourced into environment (from keyring, no disk I/O) + Running: $*"
+    "$@"
+  else
+    # Use file mode - traditional temp file approach
+    info "→ Running: $*"
+    SECRETS_FILE="$secrets_file" "$@"
+  fi
 fi

@@ -69,6 +69,7 @@ secret-tool-run [OPTIONS] COMMAND [ARGS...]
 |--------|-------------|
 | `--file FILE`, `-f FILE` | Secrets file path (default: `.env`) |
 | `--app APP`, `-a APP` | Keyring app identifier (default: current folder name) |
+| `--source`, `-s` | Source and export `.env` vars into the environment |
 | `--help`, `-h` | Show help message |
 
 
@@ -94,7 +95,26 @@ secret-tool-run hatch run dev
 
 Perfect for running development servers where you need environment variables but don't want them persisted on disk.
 
-### Example 3: GitHub Actions local testing with act
+### Example 3: Ansible playbook with environment variables
+
+```bash
+secret-tool-run --source ansible-playbook site.yml
+```
+
+**Before secret-tool-run:**
+```bash
+source .env && ansible-playbook site.yml
+```
+
+**What happens with `--source`:**
+1. Loads `.env` from keyring for current folder (or uses local file)
+2. Sources every `KEY=VALUE` pair into the environment (via `set -a`)
+3. Runs `ansible-playbook site.yml` with all env vars available
+4. Cleans up temporary `.env` file after completion
+
+Useful for any tool that expects secrets as environment variables — Ansible, Terraform, custom scripts, etc.
+
+### Example 4: GitHub Actions local testing with act
 
 ```bash
 secret-tool-run --file .secrets act --secret-file .secrets
@@ -108,7 +128,7 @@ secret-tool-run --file .secrets act --secret-file .secrets
 
 This is especially useful for testing GitHub Actions workflows locally while keeping production secrets secure.
 
-### Example 4: Multiple environments with custom app names
+### Example 5: Multiple environments with custom app names
 
 ```bash
 # Development environment
@@ -120,7 +140,7 @@ secret-tool-run --app myproject-prod npm start
 
 Each `--app` name is a separate keyring entry, allowing you to manage different secret sets (dev, staging, prod) for the same project.
 
-### Example 5: Docker commands
+### Example 6: Docker commands
 
 ```bash
 secret-tool-run docker-compose up
@@ -128,7 +148,7 @@ secret-tool-run docker-compose up
 
 Great for docker-compose files that source `.env` for configuration.
 
-### Example 6: Just viewing the secrets file path
+### Example 7: Just viewing the secrets file path
 
 ```bash
 secret-tool-run env | grep SECRETS_FILE
@@ -136,7 +156,7 @@ secret-tool-run env | grep SECRETS_FILE
 
 The `SECRETS_FILE` environment variable contains the absolute path to the secrets file created by secret-tool-run.
 
-### Example 7: File descriptor mode (no disk I/O)
+### Example 8: File descriptor mode (no disk I/O)
 
 ```bash
 secret-tool-run act --secret-file @SECRETS@
@@ -160,7 +180,7 @@ secret-tool-run act --secret-file @SECRETS@
 - Tools that verify file exists with stat checks
 - Tools that need to read the file multiple times
 
-### Example 8: Docker with file descriptor mode
+### Example 9: Docker with file descriptor mode
 
 ```bash
 secret-tool-run docker run --env-file @SECRETS@ myimage
@@ -243,6 +263,40 @@ Replaced tokens work just like file paths:
 secret-tool-run mycommand --config @SECRETS@ --output results.txt
 # All @SECRETS@ tokens are replaced with /dev/fd/9
 ```
+
+### Source Mode (Environment Variable Export)
+
+For tools that expect secrets as actual environment variables (like Ansible, shell scripts, or tools that call `os.getenv`), use the `--source` flag:
+
+```bash
+secret-tool-run --source ansible-playbook site.yml
+```
+
+**How it works:**
+- Before running your command, secret-tool-run sources the secrets using `set -a` (allexport)
+- This exports every `KEY=VALUE` pair as a real environment variable
+- Your command sees them exactly as if you had run `source .env` manually
+- **No temp file is written** — secrets are loaded directly from keyring into memory
+- Works with `@SECRETS@` too — sources from keyring directly into env without touching disk
+- When a local `.env` file already exists (not loaded from keyring), it is sourced directly from disk
+
+**Which tools benefit from `--source`?**
+
+| Tool | Without --source | With --source |
+|------|-----------------|---------------|
+| Ansible | `source .env && ansible-playbook ...` | `secret-tool-run --source ansible-playbook ...` |
+| Terraform | `source .env && terraform plan` | `secret-tool-run --source terraform plan` |
+| Shell scripts | `source .env && ./deploy.sh` | `secret-tool-run --source ./deploy.sh` |
+| Any `os.getenv`/`$VAR` consumer | needs vars in environment | vars are exported automatically |
+
+**Key difference:** without `--source`, secrets are written to a temp file and `SECRETS_FILE` env var is set.
+With `--source`, secrets are loaded directly into memory — no temp file, no `SECRETS_FILE`, just real env vars.
+
+**Combined with `@SECRETS@`:**
+```bash
+secret-tool-run --source ansible-playbook --vault-password-file @SECRETS@ site.yml
+```
+This both sources secrets into the environment AND passes one via file descriptor — maximum flexibility with zero disk writes.
 
 ### First-Run Setup
 
