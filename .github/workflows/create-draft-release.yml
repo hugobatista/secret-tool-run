@@ -28,7 +28,7 @@ jobs:
     - name: Get version
       id: get_version
       run: |
-        export version=$(grep "^version=" vault.sh | sed 's/version="\([^"]*\)".*/\1/')
+        export version=$(grep "^version=" secret-tool-run.sh | sed 's/version="\([^"]*\)".*/\1/')
         echo "version=$version" >> $GITHUB_OUTPUT
       
     #validates that the version is a valid semver
