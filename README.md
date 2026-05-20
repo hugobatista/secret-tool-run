@@ -2,9 +2,9 @@
 
 # secret-tool-run 🔐
 
-**Execute commands with secrets from keyring, not from disk.**
+**Execute commands with secrets fetched encrypted from your keyring — never stored on disk.**
 
-secret-tool-run is a bash utility that runs commands with environment secrets loaded from your system's secure keyring (through secret-tool), eliminating the need to store `.env` files on disk. Perfect for developers who want to keep credentials off the filesystem while maintaining a smooth development workflow.
+secret-tool-run is a bash utility that stores secrets **encrypted** (AES-256-CBC, enabled by default) in your system's keyring, then loads them at runtime to run your commands — eliminating `.env` files from disk. Perfect for developers who want to keep credentials off the filesystem while maintaining a smooth development workflow.
 
 
 ## Quick Example
@@ -23,6 +23,8 @@ secret-tool-run python app.py
 ```
 
 **Under the hood:** secret-tool-run retrieves your secrets from the system keyring (encrypted and managed by the OS) through secret-tool and passes them to your command — no permanent `.env` files on disk. It has three modes: **file mode** (default) writes a temp `.env` with secure permissions and deletes it after; **file descriptor mode** (`@SECRETS@`) passes secrets via an in-memory FD with zero disk writes; **source mode** (`--source`) exports secrets as real environment variables without writing any file.
+
+> **🔒 Encryption by default:** All secrets are encrypted with AES-256-CBC before being stored in the keyring. An attacker who enumerates your keyring gets ciphertext, not plaintext. The decryption key is never stored in the keyring. Use `--plaintext` only when necessary.
 
 ## Why You Need This
 
@@ -95,8 +97,7 @@ secret-tool-run [OPTIONS] COMMAND [ARGS...]
 |----------|-------------|
 | `SECRET_TOOL_PASSWORD` | Encryption password used automatically for encrypt/decrypt when set, unless overridden by `--password=PASSWORD`. |
 
-> **Note:** Encryption is enabled by default. All secrets are encrypted with AES-256-CBC before storage.
-> Use `--plaintext` to disable encryption (not recommended).
+> **Encrypted by default (AES-256-CBC).** Use `--plaintext` to opt out (not recommended).
 
 
 ## Modes of Operation
@@ -420,7 +421,32 @@ On first use (when secrets aren't in keyring):
 - **Zero disk I/O**: Use `@SECRETS@` (FD mode) or `--source` (source mode) — secrets never touch disk
 - **No git commits**: No `.env` files left behind to commit accidentally
 - **Session isolation**: Each terminal session can use different secrets with `--app` flag
-- **Encrypted payloads** (AES-256-CBC): Secret content is encrypted with AES-256-CBC before keyring storage by default, protecting against D-Bus `GetSecret` enumeration attacks. Use `--plaintext` to disable.
+- **Encrypted payloads** (AES-256-CBC): Secret content is encrypted with AES-256-CBC before keyring storage by default, protecting against D-Bus `GetSecret` enumeration attacks. See the section below for details. Use `--plaintext` to disable.
+
+### Why Encrypted Mode Matters: The Keyring Enumeration Attack
+
+The Linux Secret Service API (D-Bus) that powers GNOME Keyring, KWallet, and similar services is accessible to **any process running under your user account** — no authentication required. This means any code on your machine (malware, a compromised `pip install`, a malicious Node.js package, or even a curious colleague) can enumerate every item in your keyring:
+
+```python
+import secretstorage
+bus = secretstorage.dbus_init()
+col = secretstorage.get_default_collection(bus)
+for item in col.get_all_items():
+    print(f'  Label: {item.get_label()}')
+    print(f'  Attributes: {item.get_attributes()}')
+    print(f'  Secret: {item.get_secret().decode(errors="replace")}')
+    print()
+```
+
+This is **not a vulnerability** in the keyring — it is by design. The keyring service provides session-level isolation (secrets are encrypted at rest when the session is locked), but once you unlock your keyring at login, any process sharing your D-Bus session can retrieve every secret in plaintext.
+
+**This is why secret-tool-run encrypts by default.** When using encrypted mode (AES-256-CBC, enabled by default):
+
+- An enumerating attacker sees only **ciphertext** — meaningless without the decryption password
+- The decryption password is **never stored in the keyring** (resolved via interactive prompt, environment variable, or `--password` flag)
+- Even if an attacker dumps every keyring entry, your secrets remain confidential
+
+**When `--plaintext` is used**, secrets in the keyring are as exposed as `.env` files on disk — any process with D-Bus access can read them. Reserve `--plaintext` for ephemeral or isolated environments (e.g., CI containers where D-Bus access is restricted).
 
 **⚠️ Important**: While secret-tool-run improves security, temporary files are still written to disk briefly in file mode. For maximum security:
 - **Use `@SECRETS@`** for tools that accept a file path (FD mode — zero disk I/O)
