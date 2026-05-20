@@ -24,6 +24,21 @@ secret-tool-run python app.py
 
 **Under the hood:** secret-tool-run retrieves your secrets from the system keyring (encrypted and managed by the OS) through secret-tool and passes them to your command — no permanent `.env` files on disk. It has three modes: **file mode** (default) writes a temp `.env` with secure permissions and deletes it after; **file descriptor mode** (`@SECRETS@`) passes secrets via an in-memory FD with zero disk writes; **source mode** (`--source`) exports secrets as real environment variables without writing any file.
 
+## Why You Need This
+
+**Three threats this eliminates at once. Security and usability — no trade-off.**
+
+**1. File-harvesting malware.** Supply-chain attacks and post-exploitation tools scan disk for `.env` files and exfiltrate them. With `--source` or `@SECRETS@`, the file never exists on disk — nothing to steal.
+
+**2. The `.env` in git accident.** One wrong `git add .` and credentials are in your repository history forever. No `.env` file on disk means nothing to stage, commit, or push.
+
+**3. `export $(cat .env | xargs)` process leaks.** This common pattern spawns `cat`, `xargs`, and `/bin/echo` subprocesses whose command-line arguments are the actual secret values — visible to any user running `ps aux`. `--source` uses bash builtins only: no subprocesses, no command-line arguments, no process-table leaks.
+
+```bash
+secret-tool-run --source ansible-playbook site.yml    # no file = no malware, no git risk
+secret-tool-run --source ./deploy.sh                   # no subprocess = no ps leaks
+secret-tool-run --source npm run dev                   # all three, every time
+```
 
 ## Prerequisites
 
