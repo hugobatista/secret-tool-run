@@ -4,7 +4,7 @@ set -euo pipefail
 # secret-tool-run - Execute commands with secrets from keyring, avoiding .env files on disk
 # Automatically loads secrets from keyring, creates temporary .env, and cleans up
 
-version="0.4.0"
+version="0.3.0"
 
 # Default configuration
 secrets_file=".env"
