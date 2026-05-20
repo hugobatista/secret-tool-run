@@ -85,7 +85,18 @@ secret-tool-run [OPTIONS] COMMAND [ARGS...]
 | `--file FILE`, `-f FILE` | Secrets file path (default: `.env`) |
 | `--app APP`, `-a APP` | Keyring app identifier (default: current folder name) |
 | `--source`, `-s` | Source and export `.env` vars into the environment |
+| `--password[=PASSWORD]` | Encrypt secrets with a password (AES-256-CBC via openssl). If omitted, resolves from `SECRET_TOOL_PASSWORD` env var or prompts. Stored under a separate keyring key (`app_name-encrypted`). |
+| `--plaintext` | Disable encryption, store/retrieve secrets as plaintext (default: encryption enabled). |
 | `--help`, `-h` | Show help message |
+
+### Environment
+
+| Variable | Description |
+|----------|-------------|
+| `SECRET_TOOL_PASSWORD` | Encryption password used automatically for encrypt/decrypt when set, unless overridden by `--password=PASSWORD`. |
+
+> **Note:** Encryption is enabled by default. All secrets are encrypted with AES-256-CBC before storage.
+> Use `--plaintext` to disable encryption (not recommended).
 
 
 ## Modes of Operation
@@ -328,6 +339,69 @@ secret-tool-run --source ansible-playbook --vault-password-file @SECRETS@ site.y
 ```
 This both sources secrets into the environment AND passes one via file descriptor — maximum flexibility with zero disk writes.
 
+### Encrypted Mode (Default, Password-Protected Secrets)
+
+Encryption is **enabled by default**. All secrets are encrypted with AES-256-CBC via openssl before being stored in the keyring:
+
+```bash
+# Default: prompts for password (with confirmation) on first use
+secret-tool-run npm start
+
+# Password from environment variable
+SECRET_TOOL_PASSWORD=hunter2 secret-tool-run npm start
+
+# Explicit password (visible in ps — use with care)
+secret-tool-run --password=hunter2 npm start
+
+# Opt out of encryption
+secret-tool-run --plaintext npm start
+```
+
+**How it works:**
+
+1. Encrypted entries are stored under a separate keyring key: `app_name-encrypted` (distinct from the plaintext key `app_name`).
+2. On lookup, the tool tries the encrypted key first. If found, it resolves the password and decrypts.
+3. On first run (no existing entry), you'll be prompted for a password (with confirmation) unless `SECRET_TOOL_PASSWORD` or `--password=VALUE` is set.
+4. Existing plaintext entries remain readable with a warning: `ℹ Found plaintext entry — not encrypted`. New entries will be encrypted.
+5. Use `--plaintext` to disable encryption entirely (e.g., for CI/CD scripts that can't provide a password).
+
+**Password resolution priority** (encrypt and decrypt):
+
+| Priority | Source |
+|----------|--------|
+| 1 | `--password=VALUE` (explicit) |
+| 2 | `SECRET_TOOL_PASSWORD` env var |
+| 3 | Interactive prompt (with confirmation when storing) |
+
+**Password confirmation:** When prompted interactively to create a new encrypted entry, the password is asked twice to prevent typos. The decrypt path (loading existing entries) prompts once without confirmation.
+
+**Auto-detection:** If an encrypted entry exists and no password flags are passed, the tool resolves via env var or prompt automatically.
+
+**Security:** Encrypted secrets resist D-Bus `GetSecret` attacks — an attacker who enumerates the keyring gets ciphertext, not plaintext. The decryption key is never stored in the keyring.
+
+**Dependency:** Requires `openssl` (installed by default on most Linux distributions).
+
+**Migrating plaintext entries to encrypted:** Existing entries stored under the plaintext key (`app_name`) remain readable (with a warning). To upgrade them to encrypted:
+
+```bash
+# ⚠️ Backup your secrets first! This permanently removes the keyring entry.
+secret-tool lookup app "myapp" > /tmp/myapp-backup.env
+secret-tool clear app "myapp"                  # remove old plaintext entry
+secret-tool-run npm start                      # re-store as encrypted (will prompt for password)
+rm /tmp/myapp-backup.env                       # clean up backup
+```
+
+**CI/CD note:** If you run `secret-tool-run` in automation without a password, you must add `--plaintext` or set `SECRET_TOOL_PASSWORD`:
+```bash
+# Before (worked with plaintext default):
+secret-tool-run deploy.sh
+
+# After (encryption is default — choose one):
+secret-tool-run --plaintext deploy.sh
+# OR
+SECRET_TOOL_PASSWORD=$(cat /etc/secret.txt) secret-tool-run deploy.sh
+```
+
 ### First-Run Setup
 
 On first use (when secrets aren't in keyring):
@@ -346,6 +420,7 @@ On first use (when secrets aren't in keyring):
 - **Zero disk I/O**: Use `@SECRETS@` (FD mode) or `--source` (source mode) — secrets never touch disk
 - **No git commits**: No `.env` files left behind to commit accidentally
 - **Session isolation**: Each terminal session can use different secrets with `--app` flag
+- **Encrypted payloads** (AES-256-CBC): Secret content is encrypted with AES-256-CBC before keyring storage by default, protecting against D-Bus `GetSecret` enumeration attacks. Use `--plaintext` to disable.
 
 **⚠️ Important**: While secret-tool-run improves security, temporary files are still written to disk briefly in file mode. For maximum security:
 - **Use `@SECRETS@`** for tools that accept a file path (FD mode — zero disk I/O)
