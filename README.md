@@ -6,8 +6,9 @@
 
 secret-tool-run is a bash utility that stores secrets **encrypted** (AES-256-CBC, enabled by default) in your system's keyring, then loads them at runtime to run your commands — eliminating `.env` files from disk. Perfect for developers who want to keep credentials off the filesystem while maintaining a smooth development workflow.
 
-
 ## Quick Example
+
+![Demo: file & FD modes](docs/demo1-optimized.gif)
 
 Instead of this (storing secrets on disk):
 ```bash
