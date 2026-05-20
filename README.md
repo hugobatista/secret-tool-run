@@ -22,7 +22,7 @@ Do this (secrets from keyring):
 secret-tool-run python app.py
 ```
 
-**Under the hood:** secret-tool-run retrieves your secrets from the system keyring (encrypted and managed by the OS) through secret-tool, creates a temporary file with secure permissions only your process can read, passes it to your command, and deletes it immediately after—leaving no trace on disk.
+**Under the hood:** secret-tool-run retrieves your secrets from the system keyring (encrypted and managed by the OS) through secret-tool and passes them to your command — no permanent `.env` files on disk. It has three modes: **file mode** (default) writes a temp `.env` with secure permissions and deletes it after; **file descriptor mode** (`@SECRETS@`) passes secrets via an in-memory FD with zero disk writes; **source mode** (`--source`) exports secrets as real environment variables without writing any file.
 
 
 ## Prerequisites
@@ -73,6 +73,18 @@ secret-tool-run [OPTIONS] COMMAND [ARGS...]
 | `--help`, `-h` | Show help message |
 
 
+## Modes of Operation
+
+secret-tool-run has three modes for passing secrets to your command:
+
+| Mode | How to enable | How secrets arrive | Writes to disk? |
+|------|--------------|-------------------|-----------------|
+| **File** (default) | No flag | Temp `.env` file, `SECRETS_FILE` points to it | Temp file, auto-deleted |
+| **File Descriptor** | `@SECRETS@` token in args | In-memory FD as `/dev/fd/9`, `SECRETS_FILE=/dev/fd/9` | Never |
+| **Source** | `--source` / `-s` flag | Exported as real environment variables via `set -a` | Never |
+
+Pick the mode that matches how your tool reads secrets. The examples below show each mode in action.
+
 ## Examples
 
 ### Example 1: Python development with uv
@@ -107,10 +119,10 @@ source .env && ansible-playbook site.yml
 ```
 
 **What happens with `--source`:**
-1. Loads `.env` from keyring for current folder (or uses local file)
+1. Loads secrets from keyring (or uses local `.env` file if it exists)
 2. Sources every `KEY=VALUE` pair into the environment (via `set -a`)
 3. Runs `ansible-playbook site.yml` with all env vars available
-4. Cleans up temporary `.env` file after completion
+4. No temp file is needed when loading from keyring — secrets stay in memory
 
 Useful for any tool that expects secrets as environment variables — Ansible, Terraform, custom scripts, etc.
 
@@ -190,9 +202,9 @@ Secrets are loaded from keyring and passed to Docker without ever touching the d
 
 ## Advanced Features
 
-### Preventing Auto-Cleanup
+### Preventing Auto-Cleanup (File Mode Only)
 
-Create a `.keep` file to prevent automatic deletion of the secrets file:
+In **file mode** (the default), secret-tool-run deletes the temporary `.env` file after your command finishes. Create a `.keep` file to prevent this:
 
 ```bash
 touch .env.keep
@@ -217,13 +229,16 @@ secret-tool-run --file /tmp/my-secrets ./deploy.sh
 
 ### SECRETS_FILE Environment Variable
 
-Your command receives the `SECRETS_FILE` environment variable pointing to the secrets file:
+In **file mode** and **FD mode**, your command receives `SECRETS_FILE` pointing to the secrets source:
 
 ```bash
+# File mode: points to temp .env
 secret-tool-run bash -c 'echo "Secrets are at: $SECRETS_FILE"'
+# FD mode: points to /dev/fd/9
+secret-tool-run bash -c 'echo "Secrets are at: $SECRETS_FILE"' --secret-file @SECRETS@
 ```
 
-You can use this in scripts that need to know the file location explicitly.
+In **source mode** (`--source`), `SECRETS_FILE` is not set — the secrets are already in the environment.
 
 ### File Descriptor Mode (No Disk I/O)
 
@@ -311,14 +326,15 @@ On first use (when secrets aren't in keyring):
 ## Security Notes
 
 - **Keyring encryption**: Secrets stored in your system's encrypted keyring service
-- **File permissions**: Temporary files created with `600` permissions (owner read/write only)
-- **Short-lived exposure**: Files on disk exist only during command execution
-- **File descriptor mode**: Use `@SECRETS@` token for zero disk I/O (most secure option)
-- **No git commits**: Temporary files are created/deleted, reducing risk of accidental commits
+- **File permissions** (file mode): Temporary files created with `600` permissions (owner read/write only)
+- **Short-lived exposure** (file mode): Files on disk exist only during command execution
+- **Zero disk I/O**: Use `@SECRETS@` (FD mode) or `--source` (source mode) — secrets never touch disk
+- **No git commits**: No `.env` files left behind to commit accidentally
 - **Session isolation**: Each terminal session can use different secrets with `--app` flag
 
-**⚠️ Important**: While secret-tool-run improves security, temporary files are still written to disk briefly (in default mode). For maximum security:
-- **Use `@SECRETS@` token** in your command for zero disk writes (when your tool supports it)
+**⚠️ Important**: While secret-tool-run improves security, temporary files are still written to disk briefly in file mode. For maximum security:
+- **Use `@SECRETS@`** for tools that accept a file path (FD mode — zero disk I/O)
+- **Use `--source`** for tools that need env vars (source mode — zero disk I/O)
 - Use encrypted home directories
 - Ensure your keyring is properly locked when not in use
 - Be cautious running secret-tool-run on shared systems
