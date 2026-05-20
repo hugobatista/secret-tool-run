@@ -36,7 +36,7 @@ secret-tool-run python app.py
 
 ### One-liner (Recommended)
 
-Installs secret-tool-run user locally to `~/.local/bin`:
+Installs secret-tool-run to `~/.local/bin`:
 ```bash
 curl -fsSL https://go.hugobatista.com/ghraw/secret-tool-run/main/install.sh | sh
 ```

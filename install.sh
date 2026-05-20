@@ -48,9 +48,12 @@ header "secret-tool-run Installer"
 REPO_URL="https://go.hugobatista.com/gh/secret-tool-run"
 REPO_DIR="secret-tool-run-repo-$$"
 CLEANUP_REPO=false
+SCRIPT_FILE="secret-tool-run.sh"
 
-# Check if we're in the right directory or need to clone the repo
-if [[ ! -f "vault.sh" ]]; then
+# Check if the script exists locally
+if [[ -f $SCRIPT_FILE ]]; then
+	info "Using local secret-tool-run script..."
+else
 	info "Cloning secret-tool-run repository..."
 	if ! git clone --depth 1 "$REPO_URL" "$REPO_DIR" 2>/dev/null; then
 		error "Failed to clone repository. Make sure git is installed."
@@ -164,10 +167,10 @@ fi
 # Install the script
 info "Installing secret-tool-run to $TARGET_FILE..."
 if [[ "$NEEDS_SUDO" == true ]]; then
-	sudo cp vault.sh "$TARGET_FILE"
+	sudo cp "$SCRIPT_FILE" "$TARGET_FILE"
 	sudo chmod +x "$TARGET_FILE"
 else
-	cp vault.sh "$TARGET_FILE"
+	cp "$SCRIPT_FILE" "$TARGET_FILE"
 	chmod +x "$TARGET_FILE"
 fi
 
