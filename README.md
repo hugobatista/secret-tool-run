@@ -1,3 +1,8 @@
+> [!CAUTION]
+> This repository is **archived** and no longer maintained.
+>
+> **→ [kleys](https://go.hugobatista.com/gh/kleys)** is the cross-platform Python replacement.
+
 [![GitHub Tag](https://img.shields.io/github/v/tag/hugobatista/secret-tool-run?logo=github&label=latest)](https://go.hugobatista.com/gh/secret-tool-run/releases)
 
 # secret-tool-run 🔐
